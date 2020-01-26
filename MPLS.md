@@ -35,6 +35,9 @@ Resemble à BGP (neughbor toussa toussa)
   
 `access-list <id> <permit/deny> <net> <imask>`
 
+Sur les 4 routeurs : 
+- `access-list 10 deny <loopback> 0.0.0.0 Pour toutes les loopbacks
+- `access-list 10 permit any`
 
 ### Ping on VPCs
 
