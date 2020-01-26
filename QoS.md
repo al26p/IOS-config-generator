@@ -12,12 +12,21 @@ Pour la classse par défaut
 
 
 2. Definir règles QoS/Appliquer les règles
-- `(config)policy-map <TOMARK/MARKED>`
-- `(config-pmap)calss <Cname>`
+- `(config)policy-map <TOMARK>`
+- `(config-pmap)class <Cname>`
 - `(config-pmap-c)set ip dscp <dscp class>`
 
-3. Indiquer les interfaces concernées
+- `(config)policy-map <MARKED>`
+- `(config-pmap)class <Cname>`
+- `(config-pmap-c)bandwidth percent <%>`
 
+**Total des bande passantes <= 80 % !**
+
+3. Indiquer les interfaces concernées
+- `(config)interface F0/0`
+- `(config-int)service-policy <output/input> <MARKED/TOMARK>`
+
+MARKED : Interface out | TOMARK : Interface in
 
 ### Config Access List Etendue
 
