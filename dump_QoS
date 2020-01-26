@@ -1,0 +1,136 @@
+!
+
+!
+version 12.4
+service timestamps debug datetime msec
+service timestamps log datetime msec
+no service password-encryption
+!
+hostname R2
+!
+boot-start-marker
+boot-end-marker
+!
+!
+no aaa new-model
+memory-size iomem 5
+no ip icmp rate-limit unreachable
+ip cef
+!
+!
+no ip dhcp use vrf connected
+ip dhcp excluded-address 161.1.2.1 161.1.2.99
+!
+ip dhcp pool LAN
+   network 161.1.2.0 255.255.255.0
+   default-router 161.1.2.254 
+!
+!
+no ip domain lookup
+ip auth-proxy max-nodata-conns 3
+ip admission max-nodata-conns 3
+!
+!
+!
+!
+!
+!
+!
+!
+!
+!
+!
+!
+!
+!
+!
+!
+!
+ip tcp synwait-time 5
+!
+class-map match-all BESTEFFORT
+ match ip dscp default 
+class-map match-all FTP
+ match access-group 101
+!
+!
+policy-map TOMARK
+ class FTP
+  set ip dscp af22
+ class BESTEFFORT
+  set ip dscp af11
+policy-map MARKED
+ class FTP
+  bandwidth percent 70
+ class BESTEFFORT
+  bandwidth percent 5
+!
+! 
+!
+!
+!
+!
+interface FastEthernet0/0
+ ip address 161.1.2.254 255.255.255.0
+ duplex auto
+ speed auto
+ service-policy input TOMARK
+!
+interface Serial0/0
+ ip address 194.1.1.2 255.255.255.252
+ clock rate 2000000
+ service-policy output MARKED
+!
+interface FastEthernet0/1
+ no ip address
+ shutdown
+ duplex auto
+ speed auto
+!
+interface Serial0/1
+ no ip address
+ shutdown
+ clock rate 2000000
+!
+router bgp 7200
+ no synchronization
+ bgp log-neighbor-changes
+ network 161.1.2.0 mask 255.255.255.0
+ neighbor 194.1.1.1 remote-as 7200
+ no auto-summary
+!
+ip forward-protocol nd
+!
+!
+no ip http server
+no ip http secure-server
+!
+access-list 101 permit tcp any any eq 5004
+no cdp log mismatch duplex
+!
+!
+!
+control-plane
+!
+!
+!
+!
+!
+!
+!
+!
+!
+!
+line con 0
+ exec-timeout 0 0
+ privilege level 15
+ logging synchronous
+line aux 0
+ exec-timeout 0 0
+ privilege level 15
+ logging synchronous
+line vty 0 4
+ login
+!
+!
+end
