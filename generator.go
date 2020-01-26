@@ -11,13 +11,14 @@ import (
 )
 
 type mask struct {
-	masque string
-	imask  string
+	masque  string
+	imask   string
 	network string
+	cidr    string
 }
 
 type address struct {
-	ip  string
+	ip   string
 	netw mask
 }
 
@@ -26,24 +27,70 @@ type inter struct {
 	id         string
 	lan        bool
 	clock_rate string
-	mpls 	   bool
-	ip address
-	ipsec bool
+	mpls       bool
+	ip         address
+	ipsec      bool
+}
+
+type acl struct {
+	number string
+	policy string
+	args   string
+}
+
+type ipsec struct {
+	isakmpPolicy   string
+	hash           string
+	authentication string
+	lifetime       string
+	key            string
+	storage        string
+	trSetName      string
+	trSet          string
+	mapName        string
+	mapNo          string
+	peer           string
+	acl            acl
 }
 
 type router struct {
 	hostname   string
 	interfaces []inter
-	dhcp string
-	route string
-	mpls string
-	ipsec string
+	dhcp       string
+	route      string
+	mpls       string
+	ipsec      ipsec
+	qos        string
+}
+
+func (a address) String() string {
+	return a.ip + "/" + a.netw.cidr
+}
+
+func (a acl) String() string {
+	return fmt.Sprintf("access-list %s %s %s\n", a.number, a.policy, a.args)
+}
+
+func (i ipsec) String() string {
+	if i.peer == "" {
+		return ""
+	}
+	s := fmt.Sprintf("!\ncrypto isakmp policy %s\n hash %s\n authentication %s\n lifetime %s\n",
+		i.isakmpPolicy, i.hash, i.authentication, i.lifetime)
+	s += fmt.Sprintf("crypto isakmp key %s %s address %s\n",
+		i.storage, i.key, i.peer)
+	s += fmt.Sprintf("!\ncrypto ipsec transform-set %s %s", i.trSetName, i.trSet)
+	s += fmt.Sprintf("!\ncrypto map %s %s ipsec-isakmp\n set peer %s\n set security-association lifetime seconds %s\n"+
+		" set transform-set %s\n match address %s\n!\n!\n",
+		i.mapName, i.mapNo, i.peer, i.lifetime, i.trSetName, i.acl.number)
+	s += "!\n" + i.acl.String() + "!\n!\n"
+	return s
 }
 
 func (r router) String() string {
 	s := "\n\n\n\n\n\n   _____________________________________\n  |" +
 		"                                     |\n  |       CONFIGURATION FOR " +
-		r.hostname + "          |"+
+		r.hostname + "          |" +
 		"\n  |_____________________________________|\n" +
 		"!\n!\nversion 12.4\n" +
 		"service timestamps debug datetime msec\n" +
@@ -70,7 +117,8 @@ func (r router) String() string {
 		"!\n" +
 		"ip tcp synwait-time 5\n" +
 		"!\n" +
-		r.ipsec +
+		r.ipsec.String() +
+		r.qos +
 		"!\n"
 
 	for _, i := range r.interfaces {
@@ -99,6 +147,9 @@ func (r router) String() string {
 			}
 			if i.mpls {
 				s += " mpls ip\n"
+			}
+			if i.ipsec {
+				s += fmt.Sprintf(" crypto map %s\n", r.ipsec.mapName)
 			}
 		}
 	}
@@ -171,7 +222,9 @@ var maskDict = map[int]mask{
 	32: {masque: "255.255.255.255", imask: "0.0.0.0"},
 }
 
-var lastRout string = "rip"
+var (
+	lastRout = "rip"
+)
 
 func ask(q string, p string) string {
 	var text string
@@ -217,7 +270,7 @@ func newRouter3175(h string) router {
 }
 
 func cidr(s string) address {
-	add,nn, _ := net.ParseCIDR(s)
+	add, nn, _ := net.ParseCIDR(s)
 	r := strings.SplitN(s, "/", -1)
 	m, _ := strconv.Atoi(r[1])
 
@@ -225,9 +278,10 @@ func cidr(s string) address {
 		masque:  maskDict[m].masque,
 		imask:   maskDict[m].imask,
 		network: add.Mask(nn.Mask).String(),
+		cidr:    r[1],
 	}
 	return address{
-		ip:  add.String(),
+		ip:   add.String(),
 		netw: netww,
 	}
 }
@@ -238,7 +292,7 @@ func getAddressChopped(s string) []string {
 
 //noinspection GoSnakeCaseUsage
 func conf_t(f int) router {
-	r := newRouter3175(ask("Entrez le hostname", "R" + strconv.Itoa(f)))
+	r := newRouter3175(ask("Entrez le hostname", "R"+strconv.Itoa(f)))
 	for i, _ := range r.interfaces {
 		if r.interfaces[i].tech == "Serial" {
 			r.interfaces[i].clock_rate = "2000000"
@@ -250,16 +304,15 @@ func conf_t(f int) router {
 		r.interfaces[i].ip.ip = ip.ip + " " + ip.netw.masque
 		r.interfaces[i].ip = ip
 
-
 		r.interfaces[i].lan = "y" == ask("Interface LAN ? (utile pour routage)", "n")
 
 		if r.interfaces[i].lan {
 			if "y" == ask("Configurer le DHCP ?", "n") {
 				r.dhcp = "!\nno ip dhcp use vrf connected\n"
 				dea := getAddressChopped(r.interfaces[i].ip.netw.network)
-				a :=  ask("Adresses exclues de la zone dhcp (' ' for none)", fmt.Sprintf("%s.%s.%s.1 %s.%s.%s.99",
+				a := ask("Adresses exclues de la zone dhcp (' ' for none)", fmt.Sprintf("%s.%s.%s.1 %s.%s.%s.99",
 					dea[0], dea[1], dea[2], dea[0], dea[1], dea[2]))
-				if " " != a  {
+				if " " != a {
 					r.dhcp += "ip dhcp excluded-address " + a + "\n"
 				}
 				r.dhcp += "!\nip dhcp pool LAN\n   network " + r.interfaces[i].ip.netw.network + " " + ip.netw.masque +
@@ -270,8 +323,7 @@ func conf_t(f int) router {
 	return r
 }
 
-
-func rip(r router) string{
+func rip(r router) string {
 	s := "!\nrouter rip\n version 2\n"
 	for _, iface := range r.interfaces {
 		if iface.ip.ip != "" {
@@ -285,12 +337,12 @@ func rip(r router) string{
 	return s
 }
 
-func ospf(r router) string{
+func ospf(r router) string {
 	pid := ask("Saisir ID de l'OSPF", "100")
 	s := fmt.Sprintf("!\nrouter ospf %s\n", pid)
 	if r.interfaces[0].ip.ip == "" {
 		s += fmt.Sprintf(" router-id %s\n", ask("Loopback non renseignée, saisir id du router", "1.1.1.1"))
-	}else {
+	} else {
 		s += fmt.Sprintf(" router-id %s\n", r.interfaces[0].ip.ip)
 	}
 	s += " log-adjacency-changes\n"
@@ -300,19 +352,19 @@ func ospf(r router) string{
 				s += fmt.Sprintf(" passive-interface %s%s\n", iface.tech, iface.id)
 			}
 			s += fmt.Sprintf(" network %s %s area %s\n", iface.ip.netw.network, iface.ip.netw.imask,
-				ask("Area for network " + iface.ip.netw.network, "0"))
+				ask("Area for network "+iface.ip.netw.network, "0"))
 		}
 	}
 	return s
 }
 
-func bgp(r router) string{
+func bgp(r router) string {
 	as := ask(fmt.Sprintf("Entrez le numéro d'as pour %s", r.hostname), "72000")
 	s := fmt.Sprintf("!\nrouter bgp %s\n no synchronization\n bgp log-neighbor-changes\n", as)
 	for _, v := range r.interfaces {
-		if v.lan || (v.tech == "Loopback" && v.ip.ip != ""){
+		if v.lan || (v.tech == "Loopback" && v.ip.ip != "") {
 			s += fmt.Sprintf(" network %s mask %s\n", v.ip.netw.network, v.ip.netw.masque)
-		} else if v.ip.ip != "" && "y" == ask(fmt.Sprintf("Neighbor sur le lien %s ?", v.tech + v.id), "n"){
+		} else if v.ip.ip != "" && "y" == ask(fmt.Sprintf("Neighbor sur le lien %s ?", v.tech+v.id), "n") {
 			ip := getAddressChopped(v.ip.netw.network)
 			ip[3] = ask(fmt.Sprintf("Entrez la fin de l'ip du voisin %s.%s.%s.xxx", ip[0], ip[1], ip[2]), "1")
 			asp := ask("Entrez le numéro d'as du voisin", "7200")
@@ -326,7 +378,7 @@ func bgp(r router) string{
 	return s
 }
 
-func routage(r router) string{
+func routage(r router) string {
 	switch ask("Quel type de routae voulez vous effectuer ? (rip, ospf, bgp)", lastRout) {
 	case "rip":
 		lastRout = "rip"
@@ -341,33 +393,88 @@ func routage(r router) string{
 	return ""
 }
 
-
-
 func main() {
 	fmt.Println("Bienvenue sur le générateur de configuration iOS\n\n Configuration de la topologie : \n")
 	var routers = map[string]router{}
 
 	n, _ := strconv.Atoi(ask("Combien de routeurs voulez-vous configurer ? ", "4"))
 
-	for i := 0; i < n; i ++ {
-		r := conf_t(i+1)
+	for i := 0; i < n; i++ {
+		r := conf_t(i + 1)
 		routers[r.hostname] = r
-		ask("\n\n\n\n" + r.hostname + " Has been configured, press any key to continue.", "")
+		ask("\n\n\n\n"+r.hostname+" Has been configured, press any key to continue.", "")
 	}
 
-	for k, v := range routers{
-		if "y" == ask(fmt.Sprintf("Souhaitez vous configurer le routage de %s ?", k), "y"){
+	for k, v := range routers {
+		if "y" == ask(fmt.Sprintf("Souhaitez vous configurer le routage de %s ?", k), "y") {
 			routers[k] = router{
 				hostname:   v.hostname,
 				interfaces: v.interfaces,
 				dhcp:       v.dhcp,
 				route:      routage(v),
+				mpls:       v.mpls,
+				qos:        v.qos,
+				ipsec:      v.ipsec,
 			}
 		}
 	}
 
+	if "y" == ask("Configurer IPSec ?", "n") {
+		ipsec := ipsec{
+			isakmpPolicy:   ask("Priorité de la politique ISAKMP ? ", "1"),
+			hash:           ask("Algorythme de hash ? ", "md5"),
+			authentication: ask("Méthode d'authentification", "pre-share"),
+			lifetime:       ask("Durée de vide de la SA ? ", "14400"),
+			key:            ask("Mot de passe pour l'IPSec", "KeyIPSec"),
+			storage:        ask("Stockage de la clé (6 pour stocker en clair)", "6"),
+			trSetName:      ask("Nom du transform Set", "TrSET"),
+			trSet:          ask("Type de transformation", "esp-des esp-md5-hmac"),
+			mapName:        ask("Nom de la crypto map", "VPNmap"),
+			mapNo:          ask("Map seqnum", "1"),
+			peer:           "",
+			acl:            acl{},
+		}
+		var aclArg1 = cidr("192.168.1.0/24")
+		var aclArg2 = cidr("192.168.2.0/24")
+		var add = "172.10.2.1"
+		for {
+			a := ask("Entrez le nom du routeur pour configurer IPSec", "")
+			if a == "" {
+				break
+			}
+			ipsec.peer = ask("Entrez l'adresse WAN de l'autre routeur", add)
+			ipsec.acl = acl{
+				number: ask("Entrez l'id de l'ACL (100-199)", "100"),
+				policy: ask("Définir la politique de l'ACL", "permit ip"),
+			}
+			aclArg1 = cidr(ask("Entrez le network source", aclArg1.String()))
+			aclArg2 = cidr(ask("Entrez le network destination", aclArg2.String()))
+			ipsec.acl.args = aclArg1.ip + " " + aclArg1.netw.imask + " " + aclArg2.ip + " " + aclArg2.netw.imask
+			routers[a] = router{
+				hostname:   routers[a].hostname,
+				interfaces: routers[a].interfaces,
+				dhcp:       routers[a].dhcp,
+				route:      routers[a].route,
+				mpls:       routers[a].mpls,
+				qos:        routers[a].qos,
+				ipsec:      ipsec,
+			}
+			for k, v := range routers[a].interfaces {
+				if v.ip.ip != "" {
+					if "y" == ask(fmt.Sprintf("Ipsec sur l'interface %s - %s ?", v.tech+v.id, v.ip), "n") {
+						routers[a].interfaces[k].ipsec = true
+						add = v.ip.ip
+					}
+				}
+			}
+			aclTmp := aclArg1
+			aclArg1 = aclArg2
+			aclArg2 = aclTmp
+		}
 
-	for k, v := range routers{
+	}
+
+	for k, v := range routers {
 		ask("Press any key to reveal configuration of ", k)
 		fmt.Println(v)
 		fmt.Println(end)
