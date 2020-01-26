@@ -1,0 +1,135 @@
+!
+
+!
+version 12.4
+service timestamps debug datetime msec
+service timestamps log datetime msec
+no service password-encryption
+!
+hostname R1
+!
+boot-start-marker
+boot-end-marker
+!
+!
+no aaa new-model
+memory-size iomem 5
+no ip icmp rate-limit unreachable
+ip cef
+!
+!
+no ip dhcp use vrf connected
+ip dhcp excluded-address 176.10.1.1 176.10.1.99
+!
+ip dhcp pool LAN
+   network 176.10.1.0 255.255.255.0
+   default-router 176.10.1.254 
+!
+!
+no ip domain lookup
+ip auth-proxy max-nodata-conns 3
+ip admission max-nodata-conns 3
+!
+!
+!
+!
+!
+!
+!
+!
+!
+!
+!
+!
+!
+!
+!
+!
+!
+ip tcp synwait-time 5
+! 
+!
+crypto isakmp policy 1
+ hash md5
+ authentication pre-share
+ lifetime 14400
+crypto isakmp key 6 macle address 176.10.34.2
+!
+!
+crypto ipsec transform-set trname esp-des esp-md5-hmac 
+!
+crypto map map 1 ipsec-isakmp 
+ set peer 176.10.34.2
+ set security-association lifetime seconds 14400
+ set transform-set trname 
+ match address 101
+!
+!
+!
+!
+interface Loopback0
+ ip address 1.1.1.1 255.255.255.255
+!
+interface FastEthernet0/0
+ ip address 176.10.1.254 255.255.255.0
+ duplex auto
+ speed auto
+!
+interface Serial0/0
+ ip address 176.10.12.1 255.255.255.252
+ clock rate 2000000
+ crypto map map
+!
+interface FastEthernet0/1
+ no ip address
+ shutdown
+ duplex auto
+ speed auto
+!
+interface Serial0/1
+ no ip address
+ shutdown
+ clock rate 2000000
+!
+router rip
+ version 2
+ passive-interface FastEthernet0/0
+ network 1.0.0.0
+ network 176.10.0.0
+ no auto-summary
+!
+ip forward-protocol nd
+!
+!
+no ip http server
+no ip http secure-server
+!
+access-list 101 permit ip 176.10.1.0 0.0.0.255 176.10.2.0 0.0.0.255
+no cdp log mismatch duplex
+!
+!
+!
+control-plane
+!
+!
+!
+!
+!
+!
+!
+!
+!
+!
+line con 0
+ exec-timeout 0 0
+ privilege level 15
+ logging synchronous
+line aux 0
+ exec-timeout 0 0
+ privilege level 15
+ logging synchronous
+line vty 0 4
+ login
+!
+!
+end
