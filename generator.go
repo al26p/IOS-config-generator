@@ -26,6 +26,7 @@ type inter struct {
 	id         string
 	lan        bool
 	clock_rate string
+	mpls 	   bool
 	ip address
 }
 
@@ -34,6 +35,7 @@ type router struct {
 	interfaces []inter
 	dhcp string
 	route string
+	mpls string
 }
 
 func (r router) String() string {
@@ -62,6 +64,8 @@ func (r router) String() string {
 		"ip auth-proxy max-nodata-conns 3\n" +
 		"ip admission max-nodata-conns 3\n" +
 		"!\n" +
+		r.mpls +
+		"!\n" +
 		"ip tcp synwait-time 5\n" +
 		"!\n"
 
@@ -71,6 +75,9 @@ func (r router) String() string {
 				s += "!\n" +
 					"interface " + i.tech + i.id + "\n" +
 					" ip address " + i.ip.ip + " " + i.ip.netw.masque + "\n"
+				if i.mpls {
+					s += " mpls ip\n"
+				}
 			}
 		} else {
 			s += "!\n" +
@@ -85,6 +92,9 @@ func (r router) String() string {
 				s += " clock rate " + i.clock_rate + "\n"
 			} else {
 				s += " duplex auto\n speed auto\n"
+			}
+			if i.mpls {
+				s += " mpls ip\n"
 			}
 		}
 	}
