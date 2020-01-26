@@ -308,7 +308,7 @@ func ospf(r router) string{
 
 func bgp(r router) string{
 	as := ask(fmt.Sprintf("Entrez le numéro d'as pour %s", r.hostname), "72000")
-	s := fmt.Sprintf("!\nrouter bgp %s\n no synchronization\n gbp log-neighbor-changes\n", as)
+	s := fmt.Sprintf("!\nrouter bgp %s\n no synchronization\n bgp log-neighbor-changes\n", as)
 	for _, v := range r.interfaces {
 		if v.lan || (v.tech == "Loopback" && v.ip.ip != ""){
 			s += fmt.Sprintf(" network %s mask %s\n", v.ip.netw.network, v.ip.netw.masque)
