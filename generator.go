@@ -28,6 +28,7 @@ type inter struct {
 	clock_rate string
 	mpls 	   bool
 	ip address
+	ipsec bool
 }
 
 type router struct {
@@ -36,6 +37,7 @@ type router struct {
 	dhcp string
 	route string
 	mpls string
+	ipsec string
 }
 
 func (r router) String() string {
@@ -67,6 +69,8 @@ func (r router) String() string {
 		r.mpls +
 		"!\n" +
 		"ip tcp synwait-time 5\n" +
+		"!\n" +
+		r.ipsec +
 		"!\n"
 
 	for _, i := range r.interfaces {
